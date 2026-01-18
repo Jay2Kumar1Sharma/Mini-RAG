@@ -10,6 +10,14 @@ interface Citation {
     snippet: string;
 }
 
+interface Source {
+    index: number;
+    content: string;
+    title: string;
+    source: string;
+    relevanceScore: number;
+}
+
 interface Metrics {
     retrievedCount: number;
     rerankedCount: number;
@@ -19,11 +27,13 @@ interface Metrics {
     generateTimeMs: number;
     totalTimeMs: number;
     estimatedCost: number;
+    modelUsed?: string;
 }
 
 interface ChatResponse {
     answer: string;
     citations: Citation[];
+    sources: Source[];
     metrics: Metrics;
     noAnswer: boolean;
 }
@@ -33,6 +43,7 @@ export default function ChatInterface() {
     const [isLoading, setIsLoading] = useState(false);
     const [response, setResponse] = useState<ChatResponse | null>(null);
     const [error, setError] = useState<string | null>(null);
+    const [expandedSources, setExpandedSources] = useState<Set<number>>(new Set());
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -41,6 +52,7 @@ export default function ChatInterface() {
         setIsLoading(true);
         setError(null);
         setResponse(null);
+        setExpandedSources(new Set());
 
         try {
             const res = await fetch('/api/chat', {
@@ -66,6 +78,18 @@ export default function ChatInterface() {
     const formatAnswer = (answer: string) => {
         // Replace citation markers with styled badges
         return answer.replace(/\[(\d+)\]/g, '<span class="citation-badge">$1</span>');
+    };
+
+    const toggleSource = (index: number) => {
+        setExpandedSources(prev => {
+            const newSet = new Set(prev);
+            if (newSet.has(index)) {
+                newSet.delete(index);
+            } else {
+                newSet.add(index);
+            }
+            return newSet;
+        });
     };
 
     return (
@@ -117,26 +141,65 @@ export default function ChatInterface() {
                 <div className={`${styles.response} fade-in`}>
                     {/* Answer Section */}
                     <div className={styles.answerSection}>
-                        <h3 className={styles.sectionTitle}>Answer</h3>
+                        <h3 className={styles.sectionTitle}>
+                            Answer
+                            {response.metrics.modelUsed && (
+                                <span className={styles.modelBadge}>{response.metrics.modelUsed}</span>
+                            )}
+                        </h3>
                         <div
                             className={`${styles.answer} ${response.noAnswer ? styles.noAnswer : ''}`}
                             dangerouslySetInnerHTML={{ __html: formatAnswer(response.answer) }}
                         />
                     </div>
 
-                    {/* Citations Section */}
-                    {response.citations.length > 0 && (
-                        <div className={styles.citationsSection}>
-                            <h3 className={styles.sectionTitle}>Sources</h3>
-                            <div className={styles.citationsList}>
-                                {response.citations.map((citation) => (
-                                    <div key={citation.index} className={styles.citationCard}>
-                                        <div className={styles.citationHeader}>
-                                            <span className="citation-badge">{citation.index}</span>
-                                            <span className={styles.citationTitle}>{citation.title}</span>
+                    {/* Sources Section - All sources used for context */}
+                    {response.sources && response.sources.length > 0 && (
+                        <div className={styles.sourcesSection}>
+                            <h3 className={styles.sectionTitle}>
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                                    <polyline points="14,2 14,8 20,8" />
+                                </svg>
+                                Sources ({response.sources.length} chunks used)
+                            </h3>
+                            <div className={styles.sourcesList}>
+                                {response.sources.map((source) => (
+                                    <div
+                                        key={source.index}
+                                        className={`${styles.sourceCard} ${expandedSources.has(source.index) ? styles.expanded : ''}`}
+                                    >
+                                        <div
+                                            className={styles.sourceHeader}
+                                            onClick={() => toggleSource(source.index)}
+                                        >
+                                            <div className={styles.sourceHeaderLeft}>
+                                                <span className="citation-badge">{source.index}</span>
+                                                <span className={styles.sourceTitle}>{source.title}</span>
+                                            </div>
+                                            <div className={styles.sourceHeaderRight}>
+                                                <span className={styles.relevanceScore}>
+                                                    {(source.relevanceScore * 100).toFixed(1)}% relevant
+                                                </span>
+                                                <svg
+                                                    width="16"
+                                                    height="16"
+                                                    viewBox="0 0 24 24"
+                                                    fill="none"
+                                                    stroke="currentColor"
+                                                    strokeWidth="2"
+                                                    className={styles.expandIcon}
+                                                >
+                                                    <polyline points="6,9 12,15 18,9" />
+                                                </svg>
+                                            </div>
                                         </div>
-                                        <p className={styles.citationSnippet}>{citation.snippet}</p>
-                                        <span className={styles.citationSource}>{citation.source}</span>
+                                        {expandedSources.has(source.index) && (
+                                            <div className={styles.sourceContent}>
+                                                <p>{source.content}</p>
+                                                <span className={styles.sourceId}>{source.source}</span>
+                                            </div>
+                                        )}
                                     </div>
                                 ))}
                             </div>

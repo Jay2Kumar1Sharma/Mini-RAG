@@ -51,7 +51,7 @@ async function tryGenerateWithModel(
             },
         ],
         generationConfig: {
-            maxOutputTokens: 1024,
+            maxOutputTokens: 8192,
             temperature: 0.3,
         },
     });

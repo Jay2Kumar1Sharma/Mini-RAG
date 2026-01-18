@@ -10,6 +10,14 @@ export interface ChatRequest {
     topN?: number;
 }
 
+export interface Source {
+    index: number;
+    content: string;
+    title: string;
+    source: string;
+    relevanceScore: number;
+}
+
 export interface ChatResponse {
     success: boolean;
     answer: string;
@@ -19,6 +27,7 @@ export interface ChatResponse {
         title: string;
         snippet: string;
     }[];
+    sources: Source[];  // All sources used for the answer
     metrics: {
         retrievedCount: number;
         rerankedCount: number;
@@ -28,6 +37,7 @@ export interface ChatResponse {
         generateTimeMs: number;
         totalTimeMs: number;
         estimatedCost: number;
+        modelUsed?: string;
     };
     noAnswer: boolean;
     error?: string;
@@ -45,6 +55,7 @@ export async function POST(request: NextRequest): Promise<NextResponse<ChatRespo
                     success: false,
                     answer: '',
                     citations: [],
+                    sources: [],
                     metrics: {
                         retrievedCount: 0,
                         rerankedCount: 0,
@@ -85,15 +96,23 @@ export async function POST(request: NextRequest): Promise<NextResponse<ChatRespo
 
         const totalTimeMs = Date.now() - totalStartTime;
 
+        // Build sources array from reranked results
+        const sources: Source[] = rerankedResults.map((result, index) => ({
+            index: index + 1,
+            content: result.document.content,
+            title: result.document.metadata.title,
+            source: result.document.metadata.source,
+            relevanceScore: result.relevanceScore,
+        }));
+
         // Estimate cost (very rough - Gemini free tier, Cohere free tier)
-        // Gemini 1.5 Flash: Free tier up to 15 RPM / 1M tokens/day
-        // Cohere: Free tier up to 1000 calls/month
         const estimatedCost = 0; // Free tier
 
         return NextResponse.json({
             success: true,
             answer: generationResult.answer,
             citations: generationResult.citations,
+            sources,
             metrics: {
                 retrievedCount: searchResults.length,
                 rerankedCount: rerankedResults.length,
@@ -103,6 +122,7 @@ export async function POST(request: NextRequest): Promise<NextResponse<ChatRespo
                 generateTimeMs,
                 totalTimeMs,
                 estimatedCost,
+                modelUsed: generationResult.modelUsed,
             },
             noAnswer: generationResult.noAnswer,
         });
@@ -113,6 +133,7 @@ export async function POST(request: NextRequest): Promise<NextResponse<ChatRespo
                 success: false,
                 answer: '',
                 citations: [],
+                sources: [],
                 metrics: {
                     retrievedCount: 0,
                     rerankedCount: 0,
